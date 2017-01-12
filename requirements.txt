@@ -1,0 +1,2 @@
+IMAPClient==1.0.1
+PyPDF2==1.25.1
