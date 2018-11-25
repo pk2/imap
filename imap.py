@@ -27,7 +27,7 @@ PASSWORD = Config.get('Access', 'password')
 FILESPATH = Config.get('Files options', 'filespath')
 DATAPATH = Config.get('Files options', 'datapath')
 EXCLUDEDFILES = Config.get('Files options', 'excludefiles')
-DAYSBACK = Config.get('Files options', 'daysback')
+DAYSBACK = Config.getfloat('Files options', 'daysback')
 
 logging.config.fileConfig(DATAPATH + 'imap.conf')
 logger = logging.getLogger()
@@ -64,7 +64,7 @@ def decrypt(pdf_file, password_file=FILESPATH+'pass.csv'):
                         pageObj = pdf.getPage(pageNum)
                         pdfw.addPage(pageObj)
                     pdfw.write(open(newname, 'wb'))
-                    if row[1]:
+                    if row[1:2]:
                         path, filename = os.path.split(newname)
                         path2 = FILESPATH + row[1]
                         distutils.dir_util.mkpath(path2)
