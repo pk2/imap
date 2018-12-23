@@ -33,16 +33,24 @@ logging.config.fileConfig(DATAPATH + 'imap.conf')
 logger = logging.getLogger()
 
 
-def decrypt(pdf_file, password_file=FILESPATH+'pass.csv'):
+def decrypt(pdf_file, file_name, hdr_from, password_file=FILESPATH+'pass.csv'):
     logging.info('Start decrypting')
 
-    pdf = PyPDF2.PdfFileReader(open(pdf_file, 'rb'))
+    UNENCRYPTED_DIR_PATH = FILESPATH + 'nieodszyfrowane'
+    UNENCRYPTED_FILE_PATH = UNENCRYPTED_DIR_PATH + '/' + file_name
+    NOT_ENCRYPTED_DIR_PATH = FILESPATH + hdr_from
+    NOT_ENCRYPTED_FILE_PATH = NOT_ENCRYPTED_DIR_PATH + '/' + file_name
+
+    pdf = PyPDF2.PdfFileReader(open(pdf_file, 'r+b'))
     pdfw = PyPDF2.PdfFileWriter()
     logging.info('Files opened')
 
     if not pdf.isEncrypted:
         logging.warning("File is not encrypted.")
-        return False
+        distutils.dir_util.mkpath(NOT_ENCRYPTED_DIR_PATH)
+        os.rename(pdf_file, NOT_ENCRYPTED_FILE_PATH)
+        logging.info('Move file to: %s' % NOT_ENCRYPTED_FILE_PATH)
+        return True
     else:
         logging.info('File is encrypted')
         newname = pdf_file[:-4] + '_decrypted.pdf'
@@ -66,17 +74,29 @@ def decrypt(pdf_file, password_file=FILESPATH+'pass.csv'):
                     pdfw.write(open(newname, 'wb'))
                     if row[1:2]:
                         path, filename = os.path.split(newname)
-                        path2 = FILESPATH + row[1]
-                        distutils.dir_util.mkpath(path2)
-                        logging.info('Move file to: %s' % path2)
-                        os.rename(newname, path2 + '/' + filename)
-                        return path2
+                        ENCRYPTED_DIR_PATH = FILESPATH + row[1]
+                        distutils.dir_util.mkpath(ENCRYPTED_DIR_PATH)
+                        ENCRYPTED_FILE_PATH = ENCRYPTED_DIR_PATH + '/' + filename
+                        os.rename(newname, ENCRYPTED_FILE_PATH)
+                        logging.info('Move file to: %s' % ENCRYPTED_FILE_PATH)
+                        os.remove(pdf_file)
+                        logging.info('Remove file: %s' % pdf_file)
+                        if os.path.exists(UNENCRYPTED_FILE_PATH) and os.path.getsize(UNENCRYPTED_FILE_PATH) > 0:
+                            os.remove(UNENCRYPTED_FILE_PATH)
+                            logging.info('Remove old file: %s' % UNENCRYPTED_FILE_PATH)
+                        return ENCRYPTED_FILE_PATH
                     logging.info('Save new file')
                     return newname
             logging.warning('No password found')
             logging.info('Close pass database')
             csvfile.close()
-            return False
+            if os.path.exists(UNENCRYPTED_FILE_PATH) and os.path.getsize(UNENCRYPTED_FILE_PATH) > 0:
+                return False
+            else:
+                distutils.dir_util.mkpath(UNENCRYPTED_DIR_PATH)
+                logging.info('Move file to: %s' % UNENCRYPTED_FILE_PATH)
+                os.rename(pdf_file, UNENCRYPTED_FILE_PATH)
+                return False
 
 
 while True:
@@ -96,6 +116,9 @@ while True:
             logging.info('Fetch mail %s' % i)
             for j in odp:
                 msg = email.message_from_string(odp[j]['BODY[]'])
+                header_from = msg['From'].split("<")[1].split(">")[0].strip()
+                logging.info('From: %s' % header_from)
+
                 for part in msg.walk():
                     logging.info('Checking content type: %s' % i)
                     if not part.get_content_type() in ['application/pdf', 'application/octet-stream']:
@@ -118,7 +141,7 @@ while True:
                                 open(str(FILE), 'wb').write(part.get_payload(decode=True))
                             logging.info('Done')
                             try:
-                                if decrypt(FILE):
+                                if decrypt(FILE, fname, header_from):
                                     logging.info('Decrypting done')
                                     server.add_flags(j, [SEEN])
                             except (PyPDF2.utils.PdfReadError, NotImplementedError) as e:
