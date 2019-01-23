@@ -10,6 +10,7 @@ import email
 import time
 import csv
 import os
+import subprocess
 
 from datetime import datetime, timedelta
 from imapclient import IMAPClient, SEEN
@@ -68,25 +69,33 @@ def decrypt(pdf_file, file_name, hdr_from, password_file=FILESPATH+'pass.csv'):
                     continue
                 if writefile:
                     logging.info('File decrypted: %s' % newname),
-                    for pageNum in range(pdf.numPages):
-                        pageObj = pdf.getPage(pageNum)
-                        pdfw.addPage(pageObj)
-                    pdfw.write(open(newname, 'wb'))
-                    if row[1:2]:
+                    try:
+                        for pageNum in range(pdf.numPages):
+                            pageObj = pdf.getPage(pageNum)
+                            pdfw.addPage(pageObj)
+                        logging.info('Saving page: %s' % pageNum)
+                        pdfw.write(open(newname, 'wb'))
+                        logging.info('File saved')
+                        if row[1:2]:
+                            path, filename = os.path.split(newname)
+                            ENCRYPTED_DIR_PATH = FILESPATH + row[1]
+                            distutils.dir_util.mkpath(ENCRYPTED_DIR_PATH)
+                            ENCRYPTED_FILE_PATH = ENCRYPTED_DIR_PATH + '/' + filename
+                            os.rename(newname, ENCRYPTED_FILE_PATH)
+                            logging.info('Move file to: %s' % ENCRYPTED_FILE_PATH)
+                            os.remove(pdf_file)
+                            logging.info('Remove file: %s' % pdf_file)
+                            if os.path.exists(UNENCRYPTED_FILE_PATH) and os.path.getsize(UNENCRYPTED_FILE_PATH) > 0:
+                                os.remove(UNENCRYPTED_FILE_PATH)
+                                logging.info('Remove old file: %s' % UNENCRYPTED_FILE_PATH)
+                            return ENCRYPTED_FILE_PATH
+                        logging.info('Save new file')
+                        return newname
+                    except PyPDF2.utils.PdfReadError as e:
+                        logging.info('ERROR! Using qpdf %s' % e)
                         path, filename = os.path.split(newname)
-                        ENCRYPTED_DIR_PATH = FILESPATH + row[1]
-                        distutils.dir_util.mkpath(ENCRYPTED_DIR_PATH)
-                        ENCRYPTED_FILE_PATH = ENCRYPTED_DIR_PATH + '/' + filename
-                        os.rename(newname, ENCRYPTED_FILE_PATH)
-                        logging.info('Move file to: %s' % ENCRYPTED_FILE_PATH)
-                        os.remove(pdf_file)
-                        logging.info('Remove file: %s' % pdf_file)
-                        if os.path.exists(UNENCRYPTED_FILE_PATH) and os.path.getsize(UNENCRYPTED_FILE_PATH) > 0:
-                            os.remove(UNENCRYPTED_FILE_PATH)
-                            logging.info('Remove old file: %s' % UNENCRYPTED_FILE_PATH)
-                        return ENCRYPTED_FILE_PATH
-                    logging.info('Save new file')
-                    return newname
+                        subprocess.Popen(["qpdf","--password=" + str(row[0]), "--decrypt", str(pdf_file), str(FILESPATH + row[1] + '/' + filename)])
+                        return True
             logging.warning('No password found')
             logging.info('Close pass database')
             csvfile.close()
